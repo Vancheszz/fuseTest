@@ -4,7 +4,6 @@
 
 
 static const struct fuse_operations fs_oper =  {
- 
     .getattr = fs_getattr,
     .readdir = fs_readdir,
     .mkdir = fs_mkdir,
@@ -12,7 +11,11 @@ static const struct fuse_operations fs_oper =  {
     .unlink = fs_unlink, 
     .rmdir = fs_rmdir,
     .read = fs_read, 
-    .write = fs_write
+    .write = fs_write,
+    .rename = fs_rename,
+    .chown = fs_chown,
+    .chmod = fs_chmod,
+    .utimens = fs_utimens
 
 };
 

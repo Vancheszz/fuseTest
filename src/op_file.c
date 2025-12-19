@@ -275,3 +275,110 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     return size; 
 
 }
+
+int fs_rename(const char *from, const char *to, unsigned int flags) {
+    if (flags) return -EINVAL;
+
+    sqlite3_stmt *stmt;
+    char *err_msg = NULL;
+
+    sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+
+    const char *sql_main = "UPDATE nodes SET path = ?, ctime = ? WHERE path = ?;";
+    if (sqlite3_prepare_v2(db, sql_main, -1, &stmt, NULL) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -EIO;
+    }
+
+    sqlite3_bind_text(stmt, 1, to, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 2, (long long)time(NULL));
+    sqlite3_bind_text(stmt, 3, from, -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        return -EIO;
+    }
+    sqlite3_finalize(stmt);
+
+ 
+    const char *sql_children = 
+        "UPDATE nodes SET path = ? || substr(path, length(?) + 1) "
+        "WHERE path LIKE ? || '/%';";
+
+    if (sqlite3_prepare_v2(db, sql_children, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, to, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, from, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, from, -1, SQLITE_STATIC);
+        
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    const char *sql_data = 
+        "UPDATE data SET path = ? || substr(path, length(?) + 1) "
+        "WHERE path = ? OR path LIKE ? || '/%';";
+
+    if (sqlite3_prepare_v2(db, sql_data, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, to, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, from, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, from, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, from, -1, SQLITE_STATIC);
+        
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+
+    return 0;
+}
+int fs_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
+    (void) fi;
+    sqlite3_stmt *stmt;
+    const char *sql;
+
+    sql = "SELECT mode FROM nodes WHERE path = ?;";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) return -EIO;
+    sqlite3_bind_text(stmt, 1, path, -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return -ENOENT;
+    }
+
+    int mode = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+
+    if (S_ISDIR(mode)) return -EISDIR; // Нельзя обрезать директорию
+
+    // 2. Обновляем метаданные файла (размер, mtime, ctime)
+    sql = "UPDATE nodes SET size = ?, mtime = ?, ctime = ? WHERE path = ?;";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) return -EIO;
+
+    time_t now = time(NULL);
+    sqlite3_bind_int64(stmt, 1, size);
+    sqlite3_bind_int64(stmt, 2, (long long)now);
+    sqlite3_bind_int64(stmt, 3, (long long)now);
+    sqlite3_bind_text(stmt, 4, path, -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        return -EIO;
+    }
+    sqlite3_finalize(stmt);
+
+    int last_valid_chunk = (size > 0) ? (int)((size - 1) / CHUNK_SIZE) : -1;
+
+    sql = "DELETE FROM data WHERE path = ? AND chunk > ?;";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, path, -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 2, last_valid_chunk);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    
+
+    return 0;
+}
