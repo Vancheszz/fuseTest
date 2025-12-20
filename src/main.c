@@ -2,7 +2,7 @@
 #include "../headers/sqlfs.h"
 #include "../headers/db.h"
 
-
+#ifndef UNIT_TEST
 static const struct fuse_operations fs_oper =  {
     .getattr = fs_getattr,
     .readdir = fs_readdir,
@@ -24,3 +24,4 @@ int main(int argc, char ** argv){
     return fuse_main(argc, argv, &fs_oper, NULL);
   
 }
+#endif
