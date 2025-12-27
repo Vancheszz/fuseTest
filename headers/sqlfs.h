@@ -18,8 +18,7 @@ extern sqlite3 *db;
 
 
 void split_path(const char *path, char *parent, char *name);
-
-
+int is_directory(const char *path);
 int fs_mkdir(const char *path, mode_t mode);
 int fs_rmdir(const char *path);
 int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,

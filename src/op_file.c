@@ -352,7 +352,7 @@ int fs_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
 
     if (S_ISDIR(mode)) return -EISDIR; // Нельзя обрезать директорию
 
-    // 2. Обновляем метаданные файла (размер, mtime, ctime)
+    // Обновляем метаданные файла (размер, mtime, ctime)
     sql = "UPDATE nodes SET size = ?, mtime = ?, ctime = ? WHERE path = ?;";
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) return -EIO;
 

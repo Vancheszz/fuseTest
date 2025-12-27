@@ -109,32 +109,40 @@ int fs_rmdir(const char *path){
 
 }
 
-int fs_readdir(const char *path, void *buf, fuse_fill_dir_t fill_dir, off_t offset, struct fuse_file_info *fi, enum fuse_readdir_flags flags){
-    (void) fi; 
-    (void) offset; 
-    (void) flags;
+int fs_readdir(const char *path, void *buf, fuse_fill_dir_t fill_dir, off_t offset, struct fuse_file_info *fi, enum fuse_readdir_flags flags) {
+    (void) fi; (void) offset; (void) flags;
+
+  
     fill_dir(buf, ".", NULL, 0, 0);
     fill_dir(buf, "..", NULL, 0, 0);
 
-    const char *sql =
-        "SELECT path FROM nodes WHERE path != '/' AND "
-        "substr(path, 1, length(?)) = ?;";
+  
+    const char *sql = "SELECT path FROM nodes WHERE parent_path = ?;"; 
+    
 
     sqlite3_stmt *stmt;
-    sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    sqlite3_bind_text(stmt, 1, path, -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 2, path, -1, SQLITE_STATIC);
+    if (sqlite3_prepare_v2(db, "SELECT path FROM nodes WHERE path LIKE ? || '%' ", -1, &stmt, NULL) != SQLITE_OK) {
+        return -EIO;
+    }
+
+    char prefix[1024];
+    if (strcmp(path, "/") == 0) {
+        snprintf(prefix, sizeof(prefix), "/");
+    } else {
+        snprintf(prefix, sizeof(prefix), "%s/", path);
+    }
+
+    sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_STATIC);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        const char *full = (const char *)sqlite3_column_text(stmt, 0);
-
-        const char *name = strrchr(full, '/');
-        if (name && strlen(name) > 1) {
-            fill_dir(buf, name + 1, NULL, 0, 0);
+        const char *full_path = (const char *)sqlite3_column_text(stmt, 0);
+        
+        const char *relative = full_path + strlen(prefix);
+        if (strlen(relative) > 0 && strchr(relative, '/') == NULL) {
+            fill_dir(buf, relative, NULL, 0, 0);
         }
     }
 
     sqlite3_finalize(stmt);
-    return 0; 
-
+    return 0;
 }
