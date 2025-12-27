@@ -4,7 +4,7 @@ int fs_mkdir(const char *path, mode_t mode) {
     split_path(path, parent, name); 
     sqlite3_stmt *stmt; 
     const char* sql;
-
+    //check if dir exists 
     sql = "SELECT mode FROM nodes WHERE path = ?;";
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return -EIO;
@@ -117,7 +117,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t fill_dir, off_t offs
     fill_dir(buf, "..", NULL, 0, 0);
 
   
-    const char *sql = "SELECT path FROM nodes WHERE parent_path = ?;"; 
+    const char *sql = "SELECT path FROM nodes WHERE path LIKE ? || '/%' AND path NOT LIKE ? || '/%/%';"; 
     
 
     sqlite3_stmt *stmt;

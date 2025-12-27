@@ -13,6 +13,7 @@ static const struct fuse_operations fs_oper =  {
     .read = fs_read, 
     .write = fs_write,
     .rename = fs_rename,
+    .truncate = fs_truncate,
     .chown = fs_chown,
     .chmod = fs_chmod,
     .utimens = fs_utimens
